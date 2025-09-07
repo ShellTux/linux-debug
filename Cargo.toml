@@ -1,0 +1,8 @@
+[package]
+name = "linux-debug"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.5.47", features = ["derive"] }
+termcolor = "1.4.1"

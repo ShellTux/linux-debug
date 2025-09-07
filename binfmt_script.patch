@@ -1,0 +1,88 @@
+diff --git i/fs/binfmt_script.c w/fs/binfmt_script.c
+index 637daf6e4..ba71b8e35 100644
+--- i/fs/binfmt_script.c
++++ w/fs/binfmt_script.c
+@@ -30,6 +30,42 @@ static inline const char *next_terminator(const char *first, const char *last)
+ 			return first;
+ 	return NULL;
+ }
++static inline char *strtok_r(char *text, const char *delimitors,
++			     char **save_this)
++{
++	if (save_this == NULL) {
++		return NULL;
++	}
++
++	if (text != NULL) {
++		/* New text. */
++		for (int i = 0; text[i] != '\0'; ++i) {
++			for (char *d = (char *)delimitors; *d != '\0'; d++) {
++				if (text[i] == *d) {
++					text[i] = '\0';
++					*save_this = &text[i + 1];
++					return text;
++				}
++			}
++		}
++	} else if ((save_this != NULL) && (*save_this != NULL)) {
++		/* Old text. */
++		char *start = *save_this;
++		for (int i = 0; (*save_this)[i] != '\0'; ++i) {
++			for (char *d = (char *)delimitors; *d != '\0'; ++d) {
++				if ((*save_this)[i] == *d) {
++					(*save_this)[i] = '\0';
++					*save_this = &((*save_this)[i + 1]);
++					return start;
++				}
++			}
++		}
++		*save_this = NULL;
++		save_this = NULL;
++		return start;
++	}
++	return NULL;
++}
+ 
+ static int load_script(struct linux_binprm *bprm)
+ {
+@@ -113,10 +149,40 @@ static int load_script(struct linux_binprm *bprm)
+ 	*((char *)i_end) = '\0';
+ 	if (i_arg) {
+ 		*((char *)i_sep) = '\0';
++
++#define SHEBANG_SEPARATE_ARGS 1
++
++#if SHEBANG_SEPARATE_ARGS
++
++#define MAX_ARGS 64
++
++		char *save_ptr = NULL;
++		char *args[MAX_ARGS] = { 0 };
++		size_t argsSize = 0;
++
++		for (char *arg = strtok_r((char *)i_arg, " ", &save_ptr);
++		     arg != NULL; arg = strtok_r(NULL, " ", &save_ptr)) {
++			args[argsSize++] = arg;
++
++			if (argsSize >= MAX_ARGS)
++				break;
++		}
++
++		/*
++		 * Copy args to argv in reverse order
++		 */
++		for (char **arg = &args[argsSize - 1]; arg >= args; arg--) {
++			retval = copy_string_kernel(*arg, bprm);
++			if (retval < 0)
++				return retval;
++			bprm->argc++;
++		}
++#else
+ 		retval = copy_string_kernel(i_arg, bprm);
+ 		if (retval < 0)
+ 			return retval;
+ 		bprm->argc++;
++#endif
+ 	}
+ 	retval = copy_string_kernel(i_name, bprm);
+ 	if (retval)
